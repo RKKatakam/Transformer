@@ -34,9 +34,9 @@ class Head(nn.Module):
     def __init__(self, d_model, dropout=0.1):
         super().__init__()
         self.d_model = d_model
-        self.queries = nn.Linear(d_model, d_model, bias=True)
-        self.keys = nn.Linear(d_model, d_model, bias=True)
-        self.values = nn.Linear(d_model, d_model, bias=True)
+        self.queries = nn.Linear(d_model, d_model)
+        self.keys = nn.Linear(d_model, d_model)
+        self.values = nn.Linear(d_model, d_model)
 
         self.dropout = nn.Dropout(p=dropout)
         self.softmax = nn.Softmax(dim=-1)
@@ -44,7 +44,6 @@ class Head(nn.Module):
         nn.init.normal_(self.queries.weight, mean=0, std=1.0)
         nn.init.normal_(self.keys.weight, mean=0, std=1.0)
         nn.init.normal_(self.values.weight, mean=0, std=1.0)
-
 
     def forward(self, x):
         # queries, keys, values
@@ -100,11 +99,9 @@ class MaskedMultiHeadAttention(nn.Module):
     def forward(self, x):
         # mask top right of matrix
         mask = torch.triu(torch.ones_like(x), diagonal=1).bool()
-        x = x.masked_fill(mask, float('-inf'))
-
+        x = x.masked_fill(mask, 0.0)
         # split into heads
         x = torch.cat([head(x) for head in self.heads], dim=-1)
-
         x = self.linear(x)
         x = self.dropout(x)
         return x
@@ -116,8 +113,9 @@ class AddNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(d_model)
 
     def forward(self, x, y):
-        x_norm = self.layer_norm(x)
-        return y + x_norm
+        x = x + y
+        x = self.layer_norm(x)
+        return x
 
 
 class FeedForward(nn.Module):
@@ -149,7 +147,7 @@ class Transformer(nn.Module):
         self.embeddings = nn.Embedding(vocab_size, d_model)
         self.position_encodings = PositionalEncodings(d_model, dropout=dropout)
 
-        self.multi_head_attention = MultiHeadAttention(num_heads, d_model, dropout=dropout)
+        self.multi_head_attention = MaskedMultiHeadAttention(num_heads, d_model, dropout=dropout)
         self.add_norm1 = AddNorm(d_model)
         self.feed_forward = FeedForward(d_model, d_ff, dropout=dropout)
 
